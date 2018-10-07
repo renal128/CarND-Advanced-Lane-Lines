@@ -15,13 +15,15 @@ The goals / steps of this project are the following:
 
 [//]: # (Image References)
 
-[image1]: ./examples/undistort_output.png "Undistorted"
-[image2]: ./test_images/test1.jpg "Road Transformed"
-[image3]: ./examples/binary_combo_example.jpg "Binary Example"
-[image4]: ./examples/warped_straight_lines.jpg "Warp Example"
-[image5]: ./examples/color_fit_lines.jpg "Fit Visual"
-[image6]: ./examples/example_output.jpg "Output"
-[video1]: ./project_video.mp4 "Video"
+[image1]: ./writeup_resources/calibration_chessboard.png "Calibration (chessboard)"
+[image2]: ./writeup_resources/calibration_road.png "Calibration (road)"
+[image3]: ./writeup_resources/line_signals.png "Line signals"
+[image4]: ./writeup_resources/unwarped.png "Unwarped"
+[image5]: ./writeup_resources/warped.png "Warped"
+[image6]: ./writeup_resources/result_image.png "Result image"
+[image7]: ./writeup_resources/line_detection.png "Line detection"
+
+[video1]: ./test_videos_output/project_video.mp4 "Video"
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/571/view) Points
 
@@ -51,7 +53,7 @@ I then used the output `obj_points` and `img_points` to compute the camera calib
 
 #### 1. Provide an example of a distortion-corrected image.
 
-To apply distortion correction to an image I use `undistort(img, state)` function that serves as a wrapper for `cv2.undistort(...)`. `state` here is an instance of `State` class that I created to store various values that are useful for the pipeline. 
+To apply distortion correction to an image I use `undistort(img, state)` function that serves as a wrapper for `cv2.undistort(...)`. `state` here is an instance of `State` class that I created to store various values that are useful for the pipeline. Here's an example of a distortion-corrected image (top image - original, bottom - corrected)
 ![alt text][image2]
 
 #### 2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
@@ -66,7 +68,10 @@ This is a simple thresholding of an HLS image using the Hue channel.
 d. `get_combined_line_pixels(img, state)`
 This function calls the 3 functions above to get 3 binary images. White and yellow pixels are combined with `np.bitwise_or(white, yellow)`. Then I do a 2D convolution for edge pixels and for color pixels separately to kind of spread the signals to increase the area of intersection between colors and edges. Finally, I combine colors and edges using `np.sqrt(edges_sum * colors_sum)` and then normalize the matrix. As you can tell the result is a 2D matrix, but it's not binary - it kind of contains the strength of the signal.
 
-Here's an example of my output for this step.  (note: this is not actually from one of the test images)
+On the image below you can see: 
+* (left) warped image
+* (middle) signals: Red channel - yellow color detection, Green channel - white color detection, Blue channel - edge detection
+* (right) combined signals
 
 ![alt text][image3]
 
@@ -78,8 +83,8 @@ The function uses a precalculated `warp_matrix` that is stored in `state`.  I ch
 ```python
 # destination
 WARPED_POINTS = np.array([
-    [WARPED_WIDTH * 0, WARPED_HEIGHT - 1],
-    [WARPED_WIDTH * 0, 0],
+    [0, WARPED_HEIGHT - 1],
+    [0, 0],
     [WARPED_WIDTH - 1, 0],
     [WARPED_WIDTH - 1, WARPED_HEIGHT - 1],
 ], dtype=np.float32)
@@ -100,21 +105,22 @@ This resulted in the following source and destination points:
 
 | Source        | Destination   | 
 |:-------------:|:-------------:| 
-| 585, 460      | 320, 0        | 
-| 203, 720      | 320, 720      |
-| 1127, 720     | 960, 720      |
-| 695, 460      | 960, 0        |
+| 0, 719      | 0, 499        | 
+| 531, 468      | 0, 0      |
+| 748, 468     | 499, 0      |
+| 1279, 719      | 499, 499        |
 
 I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image and its warped counterpart to verify that the lines appear parallel in the warped image.
 
 ![alt text][image4]
+![alt text][image5]
 
 #### 4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
 
 At this step the input is a 2D matrix that stores combined edge&color signals. First, we need to find windows on an image. If we don't have a curve yet from previous frames, we look for 2 peaks(right/left) in signals in the bottom part of the matrix and place the bottom windows there and then look for the rest of windows based on the bottom windows. If we have a curve from previous frames - we look for new windows along the curve. The X-position of new windows is calculated by the function `find_peak(img_patch, conv_kernel)`, which sums up values along Y-axis and convolves them to find a peak location. You can also see some calculations involving `inertia_...` variables there - this is used to add some friction to make it more likely that the peak will be found closer to the center of the `img_patch` and less likely that the windows will jump around all the time.
-When the windows are found, the `get_curve(windows_for_side, side, state)` function goes over them and builds arrays `points_x` and `points_y`  which are then used to call `np.polyfit(...)`. The input matrix is not binary, so the value at x=45, y=89 can be e.g. `5.3`. In that case, these coordinates will be added to `points_x` and `points_y` 5 times to give the point more weight.
+When the windows are found, the `get_curve(windows_for_side, side, state)` function goes over them and builds arrays `points_x`, `points_y` and `pixel_weights` which are then used to call `np.polyfit(...)`.
 
-![alt text][image5]
+![alt text][image7]
 
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
@@ -123,7 +129,7 @@ Position of the vehicle is calculated in function `get_stats(state)` which uses 
 
 #### 6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
 
-I implemented this step in the function `draw_lane()`.  Here is an example of my result on a test image:
+I implemented this step in the function `draw_lane()`. Here is an example of my result on a test image:
 
 ![alt text][image6]
 
@@ -145,7 +151,7 @@ I also found it more useful for myself to output not just the result image but a
 5. unwarped image with lane
 6. curvature and car position 
 
-Here's a [link to my video result](./project_video.mp4)
+Here's a [link to my video result](./test_videos_output/project_video.mp4)
 
 ---
 
@@ -153,4 +159,21 @@ Here's a [link to my video result](./project_video.mp4)
 
 #### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+Issues that I faced: 
+1. Bumps on the road and other factors like going uphill/downhill make the warping unreliable
+2. Inconsistent light
+3. Noise on the road: tree shadows, black lines, white car pool signals
+4. Line dashes are not very reliable
+5. Sharp turns make the lines go out of the camera's sight
+
+Where the pipeline will likely fail:
+1. Sharp turns like in "harder_challenge_video"
+2. Night time
+3. Dense traffic
+4. Some other types of lines
+5. Different color of the road
+6. Different car (will need to re-adjust warping)
+
+What could I do to make it more robust:
+1. Apply image stabilization
+2. Implement more comprehensive logic to handle sharp turns OR use a camera with a wider angle
